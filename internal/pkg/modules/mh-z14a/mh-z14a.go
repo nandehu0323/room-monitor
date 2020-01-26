@@ -21,7 +21,6 @@ type MHZ14A struct {
 	parent   context.Context
 	cfg      *serial.Config
 	interval time.Duration
-	port     *serial.Port
 	ppm      prometheus.Gauge
 }
 
@@ -30,15 +29,10 @@ func NewMHZ14A(name string, baud int, ctx context.Context, interval time.Duratio
 		Name: name,
 		Baud: baud,
 	}
-	_port, err := serial.OpenPort(_cfg)
-	if err != nil {
-		log.Fatal(err)
-	}
 	return &MHZ14A{
 		parent:   ctx,
 		cfg:      _cfg,
 		interval: interval,
-		port:     _port,
 		ppm: promauto.NewGauge(
 			prometheus.GaugeOpts{
 				Namespace: "room",
@@ -69,6 +63,7 @@ func (m *MHZ14A) Watch() error {
 
 func (m *MHZ14A) doWatch() error {
 	_ppm, err := m.get()
+	log.Info(_ppm, err)
 	if err != nil {
 		return err
 	}
@@ -77,14 +72,21 @@ func (m *MHZ14A) doWatch() error {
 }
 
 func (m *MHZ14A) get() (uint16, error) {
-	_, err := m.port.Write(command)
+	_port, err := serial.OpenPort(m.cfg)
+	if err != nil {
+		log.Fatal(err)
+	}
+	_, err = _port.Write(command)
 	if err != nil {
 		return 0, err
 	}
 
 	buf := make([]byte, 9)
-	_, err = m.port.Read(buf)
+	_, err = _port.Read(buf)
 	if err != nil {
+		return 0, err
+	}
+	if err := _port.Close(); err != nil {
 		return 0, err
 	}
 	return (uint16(buf[2]) << 8) | uint16(buf[3]), nil
